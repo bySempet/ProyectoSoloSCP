@@ -214,7 +214,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
               break;
             }
           }
-          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[1]))
           {
             temporal = posIndividuosLocal[i];
             posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
@@ -225,7 +225,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
           }
         }
         else
-        {
+        {   //El problema esta en que el que debe de recibirlo no sabe que debe recibir a alguien nuevo
           MPI_Send(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
           MPI_Recv(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
           for(k=0;k<tam_fila;k++)
@@ -238,7 +238,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
               temp[k].posicion[0]=tempx;
               temp[k].posicion[1]=tempy;
               Reset_Casilla(particion_Tablero,temporal);
-	      break;
+	            break;
             }
           }
           MPI_Send(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
@@ -541,7 +541,7 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
 //Funcion para cambio de estado mirando los procesadores vecinos
 //La idea es que el procesador que ejecute envie a sus compañeros colindantes la posicion de una persona del borde
 //Y estos le respondan si existe alguien o no y luego el calcule la probabilidad de contagiarse si esa persona esta contagiada
-void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,int *posIndividuos,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int * Vacunados_Muertos, int tam_fila, int my_rank,int world_size, MPI_Datatype *PersonaType)
+void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,int *posIndividuos,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int * Vacunados_Muertos, int tam_fila, int my_rank,int world_size, MPI_Datatype PersonaType)
 {
   int i,j,x,y,xaux,yaux;
   int numero_filas = dimension_particion/tam_fila;
@@ -566,18 +566,18 @@ void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,i
            yaux=posIndividuos[j]%tam_fila;
            if(xaux == x+1 && yaux == y)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp,1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x +1 && yaux == y+1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x +1 && yaux == y-1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            if(temp->estado==Sin_Sintomas || temp->estado== Infectado)
            {
@@ -612,18 +612,18 @@ void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,i
            yaux=posIndividuos[j]%tam_fila;
            if(xaux == x-1 && yaux == y)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp,1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x -1 && yaux == y+1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x -1 && yaux == y-1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            if(temp->estado==Sin_Sintomas || temp->estado== Infectado)
            {
@@ -658,18 +658,18 @@ void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,i
            yaux=posIndividuos[j]%tam_fila;
            if(xaux == x-1 && yaux == y)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp,1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x -1 && yaux == y+1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x -1 && yaux == y-1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            if(temp->estado==Sin_Sintomas || temp->estado== Infectado)
            {
@@ -693,18 +693,18 @@ void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,i
            yaux=posIndividuos[j]%tam_fila;
            if(xaux == x+1 && yaux == y)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp,1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[i]],1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x +1 && yaux == y+1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            else if(xaux == x +1 && yaux == y-1)
            {
-             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-             MPI_Recv(&temp[0],1, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+             MPI_Send(&particion_Tablero[posIndividuosLocal[j]],1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
+             MPI_Recv(temp,1, PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
            }
            if(temp->estado==Sin_Sintomas || temp->estado== Infectado)
            {
@@ -850,7 +850,13 @@ int main(int argc, char* argv[])
   MPI_Bcast(posIndividuos, tam_Poblacion, MPI_INT, 0, MPI_COMM_WORLD);
  
   MPI_Barrier(MPI_COMM_WORLD);
-
+  if(world_rank==0)
+  {
+    for(i=0;i<tam_Poblacion;i++)
+    {
+      printf("Soy la persona %d y estoy en esta posicion %d %d y mi velocidad %d %d \n",Tablero[posIndividuos[i]].id,Tablero[posIndividuos[i]].posicion[0],Tablero[posIndividuos[i]].posicion[1],Tablero[posIndividuos[i]].velocidad[0],Tablero[posIndividuos[i]].velocidad[1]);
+    }
+  }
   MPI_Scatter(Tablero,dimension_local,PersonaType,particion_Tablero,dimension_local,PersonaType,0,MPI_COMM_WORLD);
 
   printf("Hola, soy el procesador %d y ya tengo mi trozo de la matriz \n",world_rank);
@@ -860,22 +866,40 @@ int main(int argc, char* argv[])
   int *Vacunados_Muertos = (int *)malloc(5* sizeof(int));
   for(i=0;i<5;i++) Vacunados_Muertos[i]=0;
   float tempVacuna=0.0;
+  printf("Hola, soy el procesador %d y empiezo el bucle \n",world_rank);
+  fflush(stdin);
   while( t < Simulacion ) //Bucle Principal
   {
+    printf("Hola, soy el procesador %d y empiezo estados local iteracion %d \n",world_rank,t);
+    fflush(stdin);
     cambiar_estado_poblacion(posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,tam_Poblacion, Vacunados_Muertos);
-    cambiar_estado_poblacion_bordes(dimension_local,tam_Poblacion,posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,Vacunados_Muertos, tam_tablero, world_rank,world_size, &PersonaType);
+    printf("Hola, soy el procesador %d y empiezo estados bordes iteracion %d \n",world_rank,t);
+    fflush(stdin);
+    cambiar_estado_poblacion_bordes(dimension_local,tam_Poblacion,posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,Vacunados_Muertos, tam_tablero, world_rank,world_size, PersonaType);
+    printf("Hola, soy el procesador %d y estados terminados ahora a mover iteracion %d \n",world_rank,t);
+    fflush(stdin);
     mover_persona(particion_Tablero,posIndividuos, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size, &PersonaType);
+    printf("Hola, soy el procesador %d y mover terminado iteracion %d \n",world_rank,t);
+    fflush(stdin);
     if(world_rank==0)
     {
+     printf("Hola, soy el procesador %d y empiezo el proceso de vacunacion %d \n",world_rank,t);
+     fflush(stdin);
      tempVacuna = vacunaDiaria+tempVacuna;
      while(tempVacuna >=1)
      {
       vacunas++;                        //El proceso de vacunacion debe realizarlo un unico procesador
       tempVacuna--;                     //Para que no todos vacunen el mismo numero de personas y se inmunice a la poblacion instantaneamente
      }
+     printf("Hola, soy el procesador %d y voy a entrar en la funcion de vacunar %d \n",world_rank,t);
+     fflush(stdin);
      vacunar_persona(particion_Tablero, posIndividuosLocal,vacunas,tam_Poblacion,Vacunados_Muertos);
      vacunas=0;
+     printf("Hola, soy el procesador %d y vacunacion %d terminada \n",world_rank,t);
+     fflush(stdin);
     }
+    printf("Hola, soy el procesador %d y termino la iteracion %d \n",world_rank,t);
+    fflush(stdin);
     t++;
   }
   MPI_Gather(Vacunados_Muertos, 5, MPI_INT, Vacunados_Muertos, 5, MPI_INT, 0, MPI_COMM_WORLD);//Recogida de datos de los procesadores
