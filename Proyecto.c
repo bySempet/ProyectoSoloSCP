@@ -177,15 +177,14 @@ void Situar_Poblacion(struct Persona *Tablero,int tam_tablero, int *posIndividuo
     Tablero[posIndividuos[i]].velocidad[1] = -3 + rand()% 6;
   }
 }
-void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *posIndividuosLocal, int tam_fila,int tam_poblacion, int dimension_Local, int my_rank, int world_size, MPI_Datatype *PersonaType)
+void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *posIndividuosLocal, int tam_fila,int tam_poblacion, int dimension_local, int my_rank, int world_size,struct Persona *personas_a_enviar, MPI_Datatype *PersonaType)
 {
-  int i,j,k,x,y,id,tempx, tempy, noposible,temporal,auxX,auxY;
+  int i,j,k,x,y,id,tempx, tempy, noposible,temporal,auxX,auxY,posicion_vector;
   int posicion,arriba,abajo;
   struct Persona *temp = malloc(sizeof(struct Persona)*tam_fila);
   struct Persona *temp2 = malloc(sizeof(struct Persona)*tam_fila);
-  int num_filas = dimension_Local/tam_fila;
-  noposible = 0;
-  abajo = 0;arriba=0;
+  int num_filas = dimension_local/tam_fila;
+  noposible,abajo,arriba,posicion_vector=0;
   if(my_rank==0)
   {
     for(i = 0; i<tam_poblacion;i++)
@@ -201,7 +200,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         tempy=particion_Tablero[posIndividuosLocal[i]].posicion[1]+y;
         if(tempx >= (num_filas-1)){abajo = 1; tempx=num_filas;}
         else if (tempx < 0)tempx=0;
-        if(tempy >= (num_filas-1))tempy=(num_filas-1);
+        if(tempy >= (tam_fila))tempy=(tam_fila-1);
         else if (tempy < 0)tempy=0;
         if(abajo == 0)
         {
@@ -217,7 +216,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
           if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[1]))
           {
             temporal = posIndividuosLocal[i];
-            posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
+            posIndividuosLocal[i] = tempx*tam_fila+tempy;
             memcpy(&particion_Tablero[posIndividuosLocal[i]],&particion_Tablero[temporal],sizeof(struct Persona));
             particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
             particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
@@ -225,24 +224,12 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
           }
         }
         else
-        {   //El problema esta en que el que debe de recibirlo no sabe que debe recibir a alguien nuevo
-          MPI_Send(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-          MPI_Recv(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-          for(k=0;k<tam_fila;k++)
-          {
-            if(temp[k].valido == 0 && temp[k].posicion[1] == tempy)
-            {
-              temporal = posIndividuosLocal[i];
-              posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
-              memcpy(&temp[k],&particion_Tablero[temporal],sizeof(struct Persona));
-              temp[k].posicion[0]=tempx;
-              temp[k].posicion[1]=tempy;
-              Reset_Casilla(particion_Tablero,temporal);
-	            break;
-            }
-          }
-          MPI_Send(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-          MPI_Recv(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        {   
+          particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
+          particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
+          memcpy(&personas_a_enviar[posicion_vector],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
+          Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
+          posicion_vector++;
         }
         abajo=0;
         noposible=0;
@@ -262,9 +249,9 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         id = particion_Tablero[posIndividuosLocal[i]].id;
         tempx=particion_Tablero[posIndividuosLocal[i]].posicion[0]+x;
         tempy=particion_Tablero[posIndividuosLocal[i]].posicion[1]+y;
-        if(tempx >= (num_filas*world_size-1))tempx = (num_filas*world_size-1);
-        else if (tempx < 0){arriba=1;tempx=-1;}
-        if(tempy >= (num_filas-1))tempy=(num_filas-1);
+        if(tempx >= (num_filas*world_size))tempx = ((num_filas*world_size)-1);
+        else if (tempx < num_filas*world_size-1){arriba=1;tempx=(num_filas*world_size-1)-1;}
+        if(tempy >= tam_fila)tempy=(tam_fila-1);
         else if (tempy < 0)tempy=0;
         if(arriba == 0)
         {
@@ -277,10 +264,10 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
               break;
             }
           }
-          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[1]))
           {
             temporal = posIndividuosLocal[i];
-            posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
+            posIndividuosLocal[i] = ((tempx*tam_fila)-(num_filas*tam_fila*world_size-1))+tempy;
             memcpy(&particion_Tablero[posIndividuosLocal[i]],&particion_Tablero[temporal],sizeof(struct Persona));
             particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
             particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
@@ -289,30 +276,18 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         }
         else
         {
-          MPI_Send(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-          MPI_Recv(&temp[0],tam_fila, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-          for(k=0;k<tam_fila;k++)
-          {
-            if(temp[k].valido == 0 && temp[k].posicion[1] == tempy)
-            {
-              temporal = posIndividuosLocal[i];
-              posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
-              memcpy(&temp[k],&particion_Tablero[temporal],sizeof(struct Persona));
-              temp[k].posicion[0]=tempx;
-              temp[k].posicion[1]=tempy;
-              Reset_Casilla(particion_Tablero,temporal);
-	      break;
-            }
-          }
-          MPI_Send(&temp[0],tam_fila, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD);
-          MPI_Recv(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank-1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+          particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
+          particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
+          memcpy(&personas_a_enviar[posicion_vector],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
+          Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
+          posicion_vector++;
         }
         arriba=0;
         noposible=0;
       }
     }
   }
-  else
+  else    
   {
     for(i = 0; i<tam_poblacion;i++)
     {
@@ -325,9 +300,9 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         id = particion_Tablero[posIndividuosLocal[i]].id;
         tempx=particion_Tablero[posIndividuosLocal[i]].posicion[0]+x;
         tempy=particion_Tablero[posIndividuosLocal[i]].posicion[1]+y;
-        if(tempx >= (num_filas*(my_rank+1)-1)){tempx = num_filas;abajo=0;}
-        else if (tempx < my_rank*num_filas){arriba=1;tempx = num_filas*my_rank-1;}
-        if(tempy >= (num_filas-1))tempy=(num_filas-1);
+        if(tempx >= (num_filas*(my_rank+1))){tempx = num_filas*(my_rank+1);abajo=1;}
+        else if (tempx < my_rank*num_filas){arriba=1;tempx = (num_filas*my_rank)-1;}
+        if(tempy >= (tam_fila))tempy=(tam_fila-1);
         else if (tempy < 0)tempx = 0;
         if(arriba == 0 && arriba == 0)
         {
@@ -340,10 +315,10 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
               break;
             }
           }
-          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[1]))
           {
             temporal = posIndividuosLocal[i];
-            posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
+            posIndividuosLocal[i] = ((tempx*tam_fila)-(num_filas*tam_fila*(my_rank)))+tempy;
             memcpy(&particion_Tablero[posIndividuosLocal[i]],&particion_Tablero[temporal],sizeof(struct Persona));
             particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
             particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
@@ -352,59 +327,11 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         }
         else
         {
-          for(j = 0; j<tam_poblacion;j++)
-          {
-            auxX=posIndividuos[j]/tam_fila;
-            auxY=posIndividuos[j]%tam_poblacion;
-            if(auxX == tempx && auxY ==tempy)
-            {
-              noposible = 1;
-              break;
-            }
-          }
-          if(noposible == 0 && (tempx!=particion_Tablero[posIndividuosLocal[i]].posicion[0] && tempy!=particion_Tablero[posIndividuosLocal[i]].posicion[0]))
-          {
-            if(arriba==1)
-            {
-              MPI_Send(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-              MPI_Recv(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-              for(k=0;k<tam_fila;k++)
-              {
-                if(temp[k].valido == 0 && temp[k].posicion[1] == tempy)
-                {
-                  temporal = posIndividuosLocal[i];
-                  posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
-                  memcpy(&temp[k],&particion_Tablero[temporal],sizeof(struct Persona));
-                  temp[k].posicion[0]=tempx;
-                  temp[k].posicion[1]=tempy;
-                  Reset_Casilla(particion_Tablero,temporal);
-		  break;
-                }
-              }
-              MPI_Send(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-              MPI_Recv(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-            }
-            else
-            {
-              MPI_Send(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-              MPI_Recv(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-              for(k=0;k<tam_fila;k++)
-              {
-                if(temp[k].valido == 0 && temp[k].posicion[1] == tempy)
-                {
-                  temporal = posIndividuosLocal[i];
-                  posIndividuosLocal[i] = tempx*tam_poblacion+tempy;
-                  memcpy(&temp[k],&particion_Tablero[temporal],sizeof(struct Persona));
-                  temp[k].posicion[0]=tempx;
-                  temp[k].posicion[1]=tempy;
-                  Reset_Casilla(particion_Tablero,temporal);
-		  break;
-                }
-              }
-              MPI_Send(&temp[0],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD);
-              MPI_Recv(&particion_Tablero[x*tam_fila],tam_fila, *PersonaType, my_rank+1, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-            }
-          }
+          particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
+          particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
+          memcpy(&personas_a_enviar[posicion_vector],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
+          Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
+          posicion_vector++;
         }
         arriba=0;
         abajo=0;
@@ -413,21 +340,27 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
     }
   }
 }
-void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int tam_vector,int * Vacunados_Muertos)
+void cambiar_estado_poblacion(int world_rank,int *posIndividuos,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int tam_vector,int * Vacunados_Muertos)
 {
-
+        printf("he entrado %d\n",world_rank);
+      fflush(stdin);
   int i,j,x,y,id,personas_en_particion;
   for(i=0;i<tam_vector;i++)
   {
     if(posIndividuosLocal[i]==0) break;
     else personas_en_particion++;
   }
+
   for(i = 0; i<personas_en_particion;i++) //Se miran los que estan en el procesador
   {
     if((particion_Tablero[posIndividuosLocal[i]].estado == Infectado || particion_Tablero[posIndividuosLocal[i]].estado == Sin_Sintomas) )
     {
+      printf("infectados %d\n",world_rank);
+      fflush(stdin);
       if(morir_o_no(Poblacion->p_contagio))
       {
+        printf("morir %d\n",world_rank);
+      fflush(stdin);
       	particion_Tablero[posIndividuosLocal[i]].estado = Fallecido;
       	particion_Tablero[posIndividuosLocal[i]].velocidad[0] = 0;
       	particion_Tablero[posIndividuosLocal[i]].velocidad[1] = 0;
@@ -435,6 +368,8 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
       }
       else if(particion_Tablero[posIndividuosLocal[i]].estado == Sin_Sintomas)
       {
+        printf("sintomas %d\n",world_rank);
+      fflush(stdin);
        if(particion_Tablero[posIndividuosLocal[i]].incubacion < Poblacion->incubacion)particion_Tablero[posIndividuosLocal[i]].incubacion++;
        else 
        {
@@ -443,7 +378,8 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
        }
       }
       else if(particion_Tablero[posIndividuosLocal[i]].estado == Infectado)
-      {
+      {printf("infectado %d\n",world_rank);
+      fflush(stdin);
         if(particion_Tablero[posIndividuosLocal[i]].recuperacion < Poblacion->recuperacion)
         particion_Tablero[posIndividuosLocal[i]].recuperacion++;
         else
@@ -456,14 +392,18 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
     }
     else if(particion_Tablero[posIndividuosLocal[i]].estado == Sano)
     {
+            printf("sanos %d\n",world_rank);
+      fflush(stdin);
      x = particion_Tablero[posIndividuosLocal[i]].posicion[0];
      y = particion_Tablero[posIndividuosLocal[i]].posicion[1];
      id = particion_Tablero[posIndividuosLocal[i]].id;
      for(j=0;j<personas_en_particion;j++)
      {
        if(particion_Tablero[posIndividuosLocal[j]].id == id);
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-3))
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-3))&& (particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
        {
+          printf("primera %d\n",world_rank);
+      fflush(stdin);
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -474,8 +414,9 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
            }
           }
        }
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-2))
-       {
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-2))&&(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
+       { printf("segunda %d\n",world_rank);
+      fflush(stdin);
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -486,8 +427,9 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
            }
           }
        }
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-1))
-       {
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-1))&&(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
+       { printf("tercera %d\n",world_rank);
+      fflush(stdin);
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -498,8 +440,9 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
            }
           }
        }
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-3))
-       {
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-3))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+       { printf("cuarta %d\n",world_rank);
+      fflush(stdin);
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -510,8 +453,9 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
           }
         }
        }
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-2))
-       {
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-2))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+       { printf("quinta%d\n",world_rank);
+      fflush(stdin);
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -522,8 +466,9 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
           }
         }
        }
-       else if((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-1))
-       {
+       else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-1))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
+       { printf("sexta %d\n",world_rank);
+      fflush(stdin);
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -535,8 +480,11 @@ void cambiar_estado_poblacion(int *posIndividuos,int *posIndividuosLocal,struct 
         }
        }
      }
+      printf("salgo %d\n",world_rank);
+      fflush(stdin);
     }
   }
+  
 }
 //Funcion para cambio de estado mirando los procesadores vecinos
 //La idea es que el procesador que ejecute envie a sus compañeros colindantes la posicion de una persona del borde
@@ -681,7 +629,7 @@ void cambiar_estado_poblacion_bordes(int dimension_particion,int tam_Poblacion,i
              }
            }
           }
-        }
+        }  
         else if(posicion == numero_filas-1)
         {
          posicion = particion_Tablero[posIndividuosLocal[i]].id;
@@ -754,6 +702,36 @@ void Personas_en_mi(struct Persona *particion_Tablero,int* posIndividuos,int* po
   }
   for(i=j;i<dimension_local;i++) posIndividuosLocal[i]=0;
  
+}
+void colocar_personas(struct Persona *particion_Tablero,int* posIndividuosLocal,int* posIndividuos,struct Persona* personas_a_enviar, int my_rank,int tam_fila, int dimension_local)
+{
+  int x,y,posicion_colocar,id;
+  int i,j = 0;
+  int num_filas= dimension_local/tam_fila;
+  while(&personas_a_enviar[i]!= NULL)
+  {
+    x=personas_a_enviar[i].posicion[0];
+    y=personas_a_enviar[i].posicion[1];
+    posicion_colocar = (x-(num_filas*tam_fila*my_rank))+y;
+    id=personas_a_enviar[i].id;
+    if(personas_a_enviar[i].valido==0)
+    {
+     memcpy(&particion_Tablero[posicion_colocar],&personas_a_enviar[i],sizeof(struct Persona));
+     posIndividuos[id]=x+y;
+     while(posIndividuosLocal[j]!=0)j++;
+     posIndividuosLocal[j]=posicion_colocar;
+     j=0;
+    }
+    else
+    {
+      while(particion_Tablero[j].valido!=1)j++;
+      memcpy(&particion_Tablero[j],&personas_a_enviar[i],sizeof(struct Persona));
+      posIndividuos[id]=x+y;
+      posIndividuosLocal[j]=posicion_colocar;
+      j=0;
+    }
+    i++;
+  }
 }
 
 
@@ -840,16 +818,9 @@ int main(int argc, char* argv[])
   struct Persona *particion_Tablero = malloc(dimension_local*sizeof(struct Persona));
   MPI_Datatype PersonaType;
   Crear_Tipo(&(Tablero->id),&(Tablero->valido),&(Tablero->edad),&(Tablero->estado),&(Tablero->p_muerte),&(Tablero->incubacion),&(Tablero->recuperacion),Tablero->posicion,Tablero->velocidad,&PersonaType);
-
-  //MPI_Datatype PoblacionType;
-  //Crear_Tipo_Poblacion(Poblacion->individuos, Poblacion->media_edad, Poblacion->radio,Poblacion->p_contagio,Poblacion->incubacion,Poblacion->recuperacion,Poblacion->cambio_vel,&PoblacionType);
-  MPI_Barrier(MPI_COMM_WORLD);
-  //MPI_Bcast(Poblacion, tamano_poblacion, PoblacionType, 0, MPI_COMM_WORLD);
- 
   //Reparticion del tablero y vector de posiciones
   MPI_Bcast(posIndividuos, tam_Poblacion, MPI_INT, 0, MPI_COMM_WORLD);
  
-  MPI_Barrier(MPI_COMM_WORLD);
   if(world_rank==0)
   {
     for(i=0;i<tam_Poblacion;i++)
@@ -860,29 +831,39 @@ int main(int argc, char* argv[])
   MPI_Scatter(Tablero,dimension_local,PersonaType,particion_Tablero,dimension_local,PersonaType,0,MPI_COMM_WORLD);
 
   printf("Hola, soy el procesador %d y ya tengo mi trozo de la matriz \n",world_rank);
+  fflush(stdin);
   int *posIndividuosLocal = (int*)malloc(tam_Poblacion*sizeof(int));
   Personas_en_mi(particion_Tablero,posIndividuos,posIndividuosLocal,dimension_local);
-  int t,vacunas=0;
+  int t=0;
+  int vacunas=0;
   int *Vacunados_Muertos = (int *)malloc(5* sizeof(int));
   for(i=0;i<5;i++) Vacunados_Muertos[i]=0;
   float tempVacuna=0.0;
-  printf("Hola, soy el procesador %d y empiezo el bucle \n",world_rank);
+  struct Persona *personas_a_enviar = malloc(tam_Poblacion*sizeof(struct Persona));
+  printf("Hola, soy el procesador %d y personas a enviar \n",world_rank);
   fflush(stdin);
-  while( t < Simulacion ) //Bucle Principal
+
+  //Bucle principal del comportamiento de las personas
+  while( t < Simulacion ) 
   {
     printf("Hola, soy el procesador %d y empiezo estados local iteracion %d \n",world_rank,t);
     fflush(stdin);
-    cambiar_estado_poblacion(posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,tam_Poblacion, Vacunados_Muertos);
+    cambiar_estado_poblacion(world_rank,posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,tam_Poblacion, Vacunados_Muertos);
     printf("Hola, soy el procesador %d y empiezo estados bordes iteracion %d \n",world_rank,t);
     fflush(stdin);
     cambiar_estado_poblacion_bordes(dimension_local,tam_Poblacion,posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,Vacunados_Muertos, tam_tablero, world_rank,world_size, PersonaType);
     printf("Hola, soy el procesador %d y estados terminados ahora a mover iteracion %d \n",world_rank,t);
     fflush(stdin);
-    mover_persona(particion_Tablero,posIndividuos, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size, &PersonaType);
+    mover_persona(particion_Tablero,posIndividuos, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size,personas_a_enviar, &PersonaType);
     printf("Hola, soy el procesador %d y mover terminado iteracion %d \n",world_rank,t);
     fflush(stdin);
     if(world_rank==0)
     {
+     MPI_Send(personas_a_enviar, tam_Poblacion, PersonaType,world_rank+1, 0, MPI_COMM_WORLD);
+     MPI_Recv(personas_a_enviar, tam_Poblacion, PersonaType,world_rank+1,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+
+     colocar_personas(particion_Tablero,posIndividuosLocal,posIndividuos,personas_a_enviar,world_rank,tam_tablero,dimension_local);
+
      printf("Hola, soy el procesador %d y empiezo el proceso de vacunacion %d \n",world_rank,t);
      fflush(stdin);
      tempVacuna = vacunaDiaria+tempVacuna;
@@ -898,10 +879,29 @@ int main(int argc, char* argv[])
      printf("Hola, soy el procesador %d y vacunacion %d terminada \n",world_rank,t);
      fflush(stdin);
     }
+    else if(world_rank==world_size-1)
+    {
+     MPI_Send(personas_a_enviar, tam_Poblacion, PersonaType,world_rank-1, 0, MPI_COMM_WORLD);
+     MPI_Recv(personas_a_enviar, tam_Poblacion, PersonaType,world_rank-1,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+     colocar_personas(particion_Tablero,posIndividuosLocal,posIndividuos,personas_a_enviar,world_rank,tam_tablero,dimension_local);
+    }
+    else
+    {
+     MPI_Send(personas_a_enviar, tam_Poblacion, PersonaType,world_rank-1, 0, MPI_COMM_WORLD);
+     MPI_Recv(personas_a_enviar, tam_Poblacion, PersonaType,world_rank-1,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+     colocar_personas(particion_Tablero,posIndividuosLocal,posIndividuos,personas_a_enviar,world_rank,tam_tablero,dimension_local);
+     MPI_Send(personas_a_enviar, tam_Poblacion, PersonaType,world_rank+1, 0, MPI_COMM_WORLD);
+     MPI_Recv(personas_a_enviar, tam_Poblacion, PersonaType,world_rank+1,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+     colocar_personas(particion_Tablero,posIndividuosLocal,posIndividuos,personas_a_enviar,world_rank,tam_tablero,dimension_local);
+    }
     printf("Hola, soy el procesador %d y termino la iteracion %d \n",world_rank,t);
     fflush(stdin);
+    //Incorrecto buscar manera de actualizar
+    MPI_Gather(posIndividuos, tam_Poblacion, MPI_INT, posIndividuos, tam_Poblacion, MPI_INT, 0, MPI_COMM_WORLD);
     t++;
+
   }
+  
   MPI_Gather(Vacunados_Muertos, 5, MPI_INT, Vacunados_Muertos, 5, MPI_INT, 0, MPI_COMM_WORLD);//Recogida de datos de los procesadores
   MPI_Gather(particion_Tablero, dimension_local, PersonaType, Tablero, dimension_local, PersonaType, 0, MPI_COMM_WORLD);//Unificar la matriz para impresion final de datos
 
