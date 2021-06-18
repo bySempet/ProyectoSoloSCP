@@ -120,7 +120,7 @@ void Crear_Poblacion(struct Persona *Tablero, int tam_tablero)
     {
       Tablero[i*tam_tablero+j].id = -1;
       Tablero[i*tam_tablero+j].valido = 0;
-      Tablero[i*tam_tablero+j].edad = 0;
+      Tablero[i*tam_tablero+j].edad = -1;
       Tablero[i*tam_tablero+j].estado = -1;
       Tablero[i*tam_tablero+j].p_muerte = 0;
       Tablero[i*tam_tablero+j].incubacion = 0;
@@ -139,7 +139,7 @@ void Reset_Casilla(struct Persona *Tablero, int pos)
   Tablero[pos].id = -1;
   Tablero[pos].valido = 0;
   Tablero[pos].edad = -1;
-  Tablero[pos].estado = 0;
+  Tablero[pos].estado = -1;
   Tablero[pos].p_muerte = 0;
   Tablero[pos].incubacion = 0;
   Tablero[pos].recuperacion = 0;
@@ -152,11 +152,12 @@ void Reset_Casilla(struct Persona *Tablero, int pos)
 //Funcion que se encarga de situar todos los individuos por primera vez
 void Situar_Poblacion(struct Persona *Tablero,int tam_tablero, int *posIndividuos, int paciente0,int personas)
 {
-  int i,j,k,semilla;
+  int i,semilla;
+  semilla=0;i=0;
   int tam_vector= personas;
   for(i = 0; i<tam_vector; i++)
   {
-    Tablero[posIndividuos[i]].id = i;     //Se queda bloqueado aqui desconozco por que
+    Tablero[posIndividuos[i]].id = i;     
     Tablero[posIndividuos[i]].valido = 1;
     semilla = rand() % 100;
     Tablero[posIndividuos[i]].edad = Obtener_edad(4,5,semilla); 
@@ -177,19 +178,34 @@ void Situar_Poblacion(struct Persona *Tablero,int tam_tablero, int *posIndividuo
     Tablero[posIndividuos[i]].velocidad[1] = -3 + rand()% 6;
   }
 }
-void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *posIndividuosLocal, int tam_fila,int tam_poblacion, int dimension_local, int my_rank, int world_size,int *cantidad_enviar,int *cantidad_enviar_mas,struct Persona *personas_a_enviar,struct Persona *personas_a_enviar_mas, MPI_Datatype *PersonaType)
+void Ordenar_VectorLocal(int *posIndividuosLocal,int posicion_actual,int tam_poblacion)
 {
-  int i,j,k,x,y,id,tempx, tempy, noposible,temporal,auxX,auxY, posicion_vector_abajo,posicion_vector_arriba;
-  int posicion,arriba,abajo;
-  struct Persona *temp = malloc(sizeof(struct Persona)*tam_fila);
-  struct Persona *temp2 = malloc(sizeof(struct Persona)*tam_fila);
+  int j=0;
+  if(posicion_actual==tam_poblacion-1)
+  {
+    posIndividuosLocal[posicion_actual]==0;
+  }
+  else
+  {
+    int aux =posicion_actual+1;
+    for(j=posicion_actual;j<tam_poblacion-1;j++)
+    {
+      posIndividuosLocal[j]=posIndividuosLocal[aux];
+      aux++;
+    }
+  }
+}
+void mover_persona(struct Persona *particion_Tablero,  int *posIndividuosLocal, int tam_fila,int tam_poblacion, int dimension_local, int my_rank, int world_size,int *cantidad_enviar,int *cantidad_enviar_mas,struct Persona *personas_a_enviar,struct Persona *personas_a_enviar_mas, MPI_Datatype *PersonaType)
+{
+  int i,j,x,y,id,tempx, tempy, noposible,temporal, posicion_vector_abajo,posicion_vector_arriba;
+  int arriba,abajo;
   int num_filas = dimension_local/tam_fila;
-  noposible,abajo,arriba, posicion_vector_abajo,posicion_vector_arriba=0;
+  i=0;j=0;x=0;y=0;id=0;tempy=0;tempx=0; temporal=0;noposible=0;arriba=0; posicion_vector_abajo=0;posicion_vector_arriba=0;abajo=0;
   if(my_rank==0)
   {
-    for(i = 0; i<tam_poblacion;i++)
+    while(i<tam_poblacion && posIndividuosLocal[i]==0)
     {
-      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido && particion_Tablero[posIndividuosLocal[i]].valido == 1 )
+      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido  )
       {
         x = particion_Tablero[posIndividuosLocal[i]].velocidad[0];
         y = particion_Tablero[posIndividuosLocal[i]].velocidad[1];
@@ -198,16 +214,15 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         id = particion_Tablero[posIndividuosLocal[i]].id;
         tempx=particion_Tablero[posIndividuosLocal[i]].posicion[0]+x;
         tempy=particion_Tablero[posIndividuosLocal[i]].posicion[1]+y;
-        if(tempx >= (num_filas-1)){abajo = 1; tempx=num_filas;}
-        else if (tempx < 0)tempx=0;
+        if(tempx > (num_filas-1)){ abajo = 1; tempx=num_filas;}
+        else if (tempx <= 0)tempx=0;
         if(tempy >= (tam_fila))tempy=(tam_fila-1);
         else if (tempy < 0)tempy=0;
         if(abajo == 0)
         {
           for(j=0;j<tam_poblacion;j++)
           {
-            if(particion_Tablero[posIndividuosLocal[j]].id == id);
-            else if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy)
+            if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy && particion_Tablero[posIndividuosLocal[j]].id != id)
             {
               noposible = 1;
               break;
@@ -222,9 +237,10 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
             particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
             Reset_Casilla(particion_Tablero,temporal);
           }
+          i++;
         }
         else
-        {   
+        {
           particion_Tablero[posIndividuosLocal[i]].posicion[0]=tempx;
           particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
           memcpy(&personas_a_enviar[posicion_vector_abajo],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
@@ -239,9 +255,9 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
   }
   else if(world_size-1==my_rank)
   {
-    for(i = 0; i<tam_poblacion;i++)
+    while(i<tam_poblacion && posIndividuosLocal[i]==0)
     {
-      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido && particion_Tablero[posIndividuosLocal[i]].valido == 1 )
+      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido )
       {
         x = particion_Tablero[posIndividuosLocal[i]].velocidad[0];
         y = particion_Tablero[posIndividuosLocal[i]].velocidad[1];
@@ -251,15 +267,14 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         tempx=particion_Tablero[posIndividuosLocal[i]].posicion[0]+x;
         tempy=particion_Tablero[posIndividuosLocal[i]].posicion[1]+y;
         if(tempx >= (num_filas*world_size))tempx = ((num_filas*world_size)-1);
-        else if (tempx < num_filas*world_size-1){arriba=1;tempx=(num_filas*world_size-1)-1;}
+        else if (tempx < (num_filas*(world_size-1))){arriba=1;tempx=(num_filas*world_size-1)-1;}
         if(tempy >= tam_fila)tempy=(tam_fila-1);
         else if (tempy < 0)tempy=0;
         if(arriba == 0)
         {
           for(j=0;j<tam_poblacion;j++)
           {
-            if(particion_Tablero[posIndividuosLocal[j]].id == id);
-            else if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy)
+            if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy && particion_Tablero[posIndividuosLocal[j]].id != id)
             {
               noposible = 1;
               break;
@@ -274,6 +289,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
             particion_Tablero[posIndividuosLocal[i]].posicion[1]=tempy;
             Reset_Casilla(particion_Tablero,temporal);
           }
+          i++;
         }
         else
         {
@@ -282,7 +298,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
           memcpy(&personas_a_enviar_mas[ posicion_vector_arriba],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
           Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
           posicion_vector_arriba++;
-          Ordenar_VectorLocal(posIndividuosLocal,&i,&tam_poblacion);
+          Ordenar_VectorLocal(posIndividuosLocal,i,tam_poblacion);
         }
         arriba=0;
         noposible=0;
@@ -291,9 +307,9 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
   }
   else    
   {
-    for(i = 0; i<tam_poblacion;i++)
+    while(i<tam_poblacion && posIndividuosLocal[i]==0)
     {
-      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido && particion_Tablero[posIndividuosLocal[i]].valido == 1 )
+      if(particion_Tablero[posIndividuosLocal[i]].estado != Fallecido )
       {
         x = particion_Tablero[posIndividuosLocal[i]].velocidad[0];
         y = particion_Tablero[posIndividuosLocal[i]].velocidad[1];
@@ -310,8 +326,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
         {
           for(j=0;j<tam_poblacion;j++)
           {
-            if(particion_Tablero[posIndividuosLocal[j]].id == id);
-            else if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy)
+            if(particion_Tablero[posIndividuosLocal[j]].posicion[0] == tempx && particion_Tablero[posIndividuosLocal[j]].posicion[1] == tempy && particion_Tablero[posIndividuosLocal[j]].id != id)
             {
               noposible = 1;
               break;
@@ -336,7 +351,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
             memcpy(&personas_a_enviar_mas[ posicion_vector_arriba],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
             Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
             posicion_vector_arriba++;
-            Ordenar_VectorLocal(posIndividuosLocal,&i,&tam_poblacion);
+            Ordenar_VectorLocal(posIndividuosLocal,i,tam_poblacion);
           }
           else if(abajo==1)
           {
@@ -345,7 +360,7 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
             memcpy(&personas_a_enviar[ posicion_vector_abajo],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
             Reset_Casilla(particion_Tablero,posIndividuosLocal[i]);
             posicion_vector_abajo++;
-            Ordenar_VectorLocal(posIndividuosLocal,&i,&tam_poblacion);
+            Ordenar_VectorLocal(posIndividuosLocal,i,tam_poblacion);
           }
         }
         arriba=0;
@@ -359,16 +374,20 @@ void mover_persona(struct Persona *particion_Tablero, int *posIndividuos, int *p
 }
 void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int dimension_local,int tam_fila,int world_size,int world_rank,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int tam_vector,int * Vacunados_Muertos,struct Persona * personas_a_enviar,struct Persona * personas_a_enviar_mas)
 {
+  printf("entro primera linea");
+    fflush(stdin);
   int i,j,x,y,id,personas_en_particion,num_filas, cantidad1,cantidad2;
+  personas_en_particion=0;
   for(i=0;i<tam_vector;i++)
   {
     if(posIndividuosLocal[i]==0) break;
     else personas_en_particion++;
   }
+  id=0;y=0;x=0;
   num_filas=dimension_local/tam_fila;
   cantidad1=0;
   cantidad2=0;
-  for(i = 0; i<personas_en_particion;i++) //Se miran los que estan en el procesador
+  for(i = 0; i<personas_en_particion;i++) 
   {
     x=posIndividuosLocal[i];
     if(world_rank==0)
@@ -383,7 +402,6 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
     {
       if(x<tam_fila)
       {
-        printf("entro con esta persona: %d %d %d %d\n",particion_Tablero[posIndividuosLocal[i]].posicion[0],particion_Tablero[posIndividuosLocal[i]].posicion[1],particion_Tablero[posIndividuosLocal[i]].id,world_rank);
         memcpy(&personas_a_enviar_mas[cantidad2],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
         cantidad2++;
       }
@@ -395,21 +413,19 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
         memcpy(&personas_a_enviar[cantidad1],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
         cantidad1++;
       }
-      else
+      else if(x<tam_fila)
       {
-         memcpy(&personas_a_enviar_mas[cantidad2],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
+        memcpy(&personas_a_enviar_mas[cantidad2],&particion_Tablero[posIndividuosLocal[i]],sizeof(struct Persona));
         cantidad2++;
       }
     }
 
     if((particion_Tablero[posIndividuosLocal[i]].estado == Infectado || particion_Tablero[posIndividuosLocal[i]].estado == Sin_Sintomas) )
-    {
-      printf("infectados %d\n",world_rank);
-      fflush(stdin);
+    {printf("entro");
+    fflush(stdin);
       if(morir_o_no(Poblacion->p_contagio))
       {
-        printf("morir %d\n",world_rank);
-        fflush(stdin);
+
       	particion_Tablero[posIndividuosLocal[i]].estado = Fallecido;
       	particion_Tablero[posIndividuosLocal[i]].velocidad[0] = 0;
       	particion_Tablero[posIndividuosLocal[i]].velocidad[1] = 0;
@@ -417,8 +433,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
       }
       else if(particion_Tablero[posIndividuosLocal[i]].estado == Sin_Sintomas)
       {
-        printf("sintomas %d\n",world_rank);
-        fflush(stdin);
+
        if(particion_Tablero[posIndividuosLocal[i]].incubacion < Poblacion->incubacion)particion_Tablero[posIndividuosLocal[i]].incubacion++;
        else 
        {
@@ -427,8 +442,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
        }
       }
       else if(particion_Tablero[posIndividuosLocal[i]].estado == Infectado)
-      {printf("infectado %d\n",world_rank);
-       fflush(stdin);
+      {
         if(particion_Tablero[posIndividuosLocal[i]].recuperacion < Poblacion->recuperacion)
         particion_Tablero[posIndividuosLocal[i]].recuperacion++;
         else
@@ -438,11 +452,12 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
           Vacunados_Muertos[3]++;
         }
       }
+
     }
     else if(particion_Tablero[posIndividuosLocal[i]].estado == Sano)
     {
-            printf("sanos %d\n",world_rank);
-      fflush(stdin);
+printf("entro sano");
+    fflush(stdin);
      x = particion_Tablero[posIndividuosLocal[i]].posicion[0];
      y = particion_Tablero[posIndividuosLocal[i]].posicion[1];
      id = particion_Tablero[posIndividuosLocal[i]].id;
@@ -451,8 +466,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
        if(particion_Tablero[posIndividuosLocal[j]].id == id);
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-3))&& (particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
        {
-          printf("primera %d\n",world_rank);
-         fflush(stdin);
+
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -464,8 +478,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
           }
        }
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-2))&&(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
-       { printf("segunda %d\n",world_rank);
-      fflush(stdin);
+       { 
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -477,8 +490,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
           }
        }
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]-1))&&(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]))
-       { printf("tercera %d\n",world_rank);
-      fflush(stdin);
+       { 
          if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
           {
            if(contagiar_o_no(particion_Tablero[posIndividuosLocal[j]].p_muerte))
@@ -490,8 +502,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
           }
        }
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+3) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-3))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
-       { printf("cuarta %d\n",world_rank);
-      fflush(stdin);
+       { 
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -503,8 +514,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
         }
        }
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+2) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-2))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
-       { printf("quinta%d\n",world_rank);
-      fflush(stdin);
+       { 
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -516,8 +526,7 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
         }
        }
        else if(((particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]+1) ||(particion_Tablero[posIndividuosLocal[j]].posicion[1] == particion_Tablero[posIndividuosLocal[i]].posicion[1]-1))&&(particion_Tablero[posIndividuosLocal[j]].posicion[0] == particion_Tablero[posIndividuosLocal[i]].posicion[0]))
-       { printf("sexta %d\n",world_rank);
-      fflush(stdin);
+       {
         if(particion_Tablero[posIndividuosLocal[j]].estado== Infectado || particion_Tablero[posIndividuosLocal[j]].estado == Sin_Sintomas)
         {
 	        if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
@@ -529,8 +538,6 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
         }
        }
      }
-      printf("salgo %d\n",world_rank);
-      fflush(stdin);
     }
   }
 
@@ -540,23 +547,27 @@ void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int 
 //Funcion para cambio de estado mirando los procesadores vecinos
 //La idea es que el procesador que ejecute envie a sus compañeros colindantes la posicion de una persona del borde
 //Y estos le respondan si existe alguien o no y luego el calcule la probabilidad de contagiarse si esa persona esta contagiada
-void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_mas, struct Persona *personas_a_enviar, struct Persona *personas_a_enviar_mas ,int dimension_particion,int tam_Poblacion,int *posIndividuos,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int * Vacunados_Muertos, int tam_fila, int my_rank,int world_size, MPI_Datatype PersonaType)
+void cambiar_estado_poblacion_bordes(int recepcion,int recepcion_mas, struct Persona *personas_a_enviar, struct Persona *personas_a_enviar_mas ,int dimension_particion,int tam_Poblacion,int *posIndividuosLocal,struct Persona *particion_Tablero,int * Vacunados_Muertos, int tam_fila, int my_rank,int world_size, MPI_Datatype PersonaType)
 {
-  int i,j,x,y,xaux,yaux;
+  int i,j,personas_en_particion;
   int numero_filas = dimension_particion/tam_fila;
-  struct Persona *temp = malloc(sizeof(struct Persona));
-  int posicion;
+  personas_en_particion=0;
+  for(i=0;i<tam_Poblacion;i++)
+  {
+    if(posIndividuosLocal[i]==0) break;
+    else personas_en_particion++;
+  }
   if(my_rank==0)
   {
-    for(i = 0; i<*cantidad_enviar_mas;i++)
+    for(i = 0; i<recepcion;i++)
     {
-     for(j=0; j<tam_Poblacion;j++)
+     for(j=0; j<personas_en_particion;j++)
      {
-       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar_mas[i].posicion[0]-1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]+1))
+       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar[i].posicion[0]-1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1]+1))
        {
-         if((personas_a_enviar_mas[i].estado== Infectado ||personas_a_enviar_mas[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
+         if((personas_a_enviar[i].estado== Infectado ||personas_a_enviar[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
          {
-           if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
+           if(contagiar_o_no(personas_a_enviar[i].p_muerte))
           {
             particion_Tablero[posIndividuosLocal[i]].estado = Sin_Sintomas;
             Vacunados_Muertos[2]++;
@@ -569,7 +580,7 @@ void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_m
   }
   else if(my_rank == world_size-1)
   {
-    for(i = 0; i<*cantidad_enviar;i++)
+    for(i = 0; i<recepcion_mas;i++)
     {
      for(j=0; j<tam_Poblacion;j++)
      {
@@ -577,7 +588,7 @@ void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_m
        {
          if((personas_a_enviar_mas[i].estado== Infectado ||personas_a_enviar_mas[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
          {
-           if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
+           if(contagiar_o_no(personas_a_enviar_mas[i].p_muerte))
           {
             particion_Tablero[posIndividuosLocal[i]].estado = Sin_Sintomas;
             Vacunados_Muertos[2]++;
@@ -590,15 +601,15 @@ void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_m
   }
   else
   {
-    for(i = 0; i<*cantidad_enviar_mas;i++)
+    for(i = 0; i<recepcion;i++)
     {
      for(j=0; j<tam_Poblacion;j++)
      {
-       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar_mas[i].posicion[0]-1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]+1))
+       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar[i].posicion[0]-1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar[i].posicion[1]+1))
        {
-         if((personas_a_enviar_mas[i].estado== Infectado ||personas_a_enviar_mas[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
+         if((personas_a_enviar[i].estado== Infectado ||personas_a_enviar[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
          {
-           if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
+           if(contagiar_o_no(personas_a_enviar[i].p_muerte))
           {
             particion_Tablero[posIndividuosLocal[i]].estado = Sin_Sintomas;
             Vacunados_Muertos[2]++;
@@ -608,15 +619,15 @@ void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_m
        }
      }
     }
-    for(i = 0; i<*cantidad_enviar_mas;i++)
+    for(i = 0; i<recepcion_mas;i++)
     {
      for(j=0; j<tam_Poblacion;j++)
      {
-       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar_mas[i].posicion[0]-1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]+1))
+       if((particion_Tablero[posIndividuosLocal[j]].posicion[0]== personas_a_enviar_mas[i].posicion[0]+1)&&(particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]-1 || particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1] ||particion_Tablero[posIndividuosLocal[j]].posicion[1]== personas_a_enviar_mas[i].posicion[1]+1))
        {
          if((personas_a_enviar_mas[i].estado== Infectado ||personas_a_enviar_mas[i].estado== Sin_Sintomas) && particion_Tablero[posIndividuosLocal[j]].estado== Sano)
          {
-           if(contagiar_o_no(particion_Tablero[posIndividuosLocal[i]].p_muerte))
+           if(contagiar_o_no(personas_a_enviar_mas[i].p_muerte))
           {
             particion_Tablero[posIndividuosLocal[i]].estado = Sin_Sintomas;
             Vacunados_Muertos[2]++;
@@ -631,8 +642,8 @@ void cambiar_estado_poblacion_bordes(int *cantidad_enviar,int *cantidad_enviar_m
 void vacunar_persona(struct Persona *particion_Tablero, int *posIndividuosLocal,int vacunaDiaria,int tam_pobla, int * Vacunados_Muertos)
 {
   int j,vacunas;
-  j,vacunas= 0;
-    if (vacunaDiaria>=0.999)
+  j=0;vacunas= 0;
+    if (vacunaDiaria>=1)
     {
      while(vacunas < vacunaDiaria && posIndividuosLocal[j] != 0)
      {
@@ -647,44 +658,25 @@ void vacunar_persona(struct Persona *particion_Tablero, int *posIndividuosLocal,
    }
 }
 //posIndividuosLocal contendra las personas dentro de la matriz del procesador que invoque la funcion
-void Personas_en_mi(struct Persona *particion_Tablero,int* posIndividuosLocal,int dimension_local)
+void Personas_en_mi(struct Persona *particion_Tablero,int* posIndividuosLocal,int dimension_local,int tam_poblacion)
 {
   int i,j;
   j= 0;
   for(i=0;i<dimension_local;i++)
   {
-    if(particion_Tablero[i].valido!=0)
+    if(particion_Tablero[i].valido=1)
     {
       posIndividuosLocal[j]=i;
       j++;
     }
   }
-  for(i=j;i<dimension_local;i++) posIndividuosLocal[i]=0;
+  for(i=j;i<tam_poblacion;i++) posIndividuosLocal[i]=0;
  
 }
-void Ordenar_VectorLocal(int *posIndividuosLocal,int posicion_actual,int tam_poblacion)
+void colocar_personas(struct Persona *particion_Tablero,int* posIndividuosLocal,int recepcion,int recepcion_mas,struct Persona* personas_a_enviar,struct Persona* personas_a_enviar_mas,int world_size,int my_rank,int tam_fila, int dimension_local)
 {
-  int j=0;
-  if(posicion_actual==tam_poblacion-1)
-  {
-    posIndividuosLocal[posicion_actual]==0;
-  }
-  else
-  {
-    int aux =posicion_actual+1;
-    for(j=posicion_actual;j<tam_poblacion-1;j++)
-    {
-      posIndividuosLocal[j]=posIndividuosLocal[aux];
-      aux++;
-    }
-  }
-
-
-}
-void colocar_personas(struct Persona *particion_Tablero,int* posIndividuosLocal,int* posIndividuos,int recepcion,int recepcion_mas,struct Persona* personas_a_enviar,struct Persona* personas_a_enviar_mas,int world_size,int my_rank,int tam_fila, int dimension_local)
-{
-  int x,y,posicion_colocar,id;
-  int i,j = 0;
+  int x,y,posicion_colocar,id,i,j,z;
+  id=0;posicion_colocar=0;x=0;y=0;z=0;
   int num_filas= dimension_local/tam_fila;
   int iteraciones= recepcion;
   int iteraciones_mas= recepcion_mas;
@@ -707,8 +699,9 @@ void colocar_personas(struct Persona *particion_Tablero,int* posIndividuosLocal,
       {
        while(particion_Tablero[j].valido!=1)j++;
        memcpy(&particion_Tablero[j],&personas_a_enviar[i],sizeof(struct Persona));
-       posIndividuosLocal[j]=posicion_colocar;
-       j=0;
+       while(posIndividuosLocal[z]!=0)z++;
+       posIndividuosLocal[z]=j;
+       j=0;z=0;
       }
     
     }
@@ -732,19 +725,93 @@ void colocar_personas(struct Persona *particion_Tablero,int* posIndividuosLocal,
       {
        while(particion_Tablero[j].valido!=1)j++;
        memcpy(&particion_Tablero[j],&personas_a_enviar_mas[i],sizeof(struct Persona));
-       posIndividuosLocal[j]=posicion_colocar;
-       j=0;
+       while(posIndividuosLocal[z]!=0)z++;
+       posIndividuosLocal[z]=j;
+       j=0;z=0;
       }
     
     }
   }
   else
   {
-
+    for(i=0; i<iteraciones_mas;i++)
+    {
+      x=personas_a_enviar_mas[i].posicion[0];
+      y=personas_a_enviar_mas[i].posicion[1];
+      posicion_colocar = (x-(num_filas*tam_fila*my_rank))+y;
+      id=personas_a_enviar_mas[i].id;
+      if(particion_Tablero[posicion_colocar].valido==0)
+      {
+       memcpy(&particion_Tablero[posicion_colocar],&personas_a_enviar_mas[i],sizeof(struct Persona));
+       while(posIndividuosLocal[j]!=0)j++;
+       posIndividuosLocal[j]=posicion_colocar;
+       j=0;
+      }
+      else
+      {
+       while(particion_Tablero[j].valido!=1)j++;
+       memcpy(&particion_Tablero[j],&personas_a_enviar_mas[i],sizeof(struct Persona));
+       while(posIndividuosLocal[z]!=0)z++;
+       posIndividuosLocal[z]=j;
+       j=0;z=0;
+      }
+    }
+    for(i=0; i<iteraciones;i++)
+    {
+      x=personas_a_enviar[i].posicion[0];
+      y=personas_a_enviar[i].posicion[1];
+      posicion_colocar = (x-(num_filas*tam_fila*my_rank))+y;
+      id=personas_a_enviar[i].id;
+      if(particion_Tablero[posicion_colocar].valido==0)
+      {
+       memcpy(&particion_Tablero[posicion_colocar],&personas_a_enviar[i],sizeof(struct Persona));
+       while(posIndividuosLocal[j]!=0)j++;
+       posIndividuosLocal[j]=posicion_colocar;
+       j=0;
+      }
+      else
+      {
+       while(particion_Tablero[j].valido!=1)j++;
+       memcpy(&particion_Tablero[j],&personas_a_enviar[i],sizeof(struct Persona));
+       while(posIndividuosLocal[z]!=0)z++;
+       posIndividuosLocal[z]=j;
+       j=0;z=0;
+      }
+    
+    }
   }
   
 }
+void inicializar_envios(struct Persona * personas_a_enviar,struct Persona *personas_a_enviar_mas,int tam_Poblacion)
+{
+  int j=0;
+  for(j = 0; j<tam_Poblacion; j++)
+    {
+      personas_a_enviar_mas[j].id = -1;
+      personas_a_enviar_mas[j].valido = 0;
+      personas_a_enviar_mas[j].edad = -1;
+      personas_a_enviar_mas[j].estado = -1;
+      personas_a_enviar_mas[j].p_muerte = 0;
+      personas_a_enviar_mas[j].incubacion = 0;
+      personas_a_enviar_mas[j].recuperacion = 0;
+      personas_a_enviar_mas[j].posicion[0] = 0;
+      personas_a_enviar_mas[j].posicion[1] = 0;
+      personas_a_enviar_mas[j].velocidad[0] = 0;
+      personas_a_enviar_mas[j].velocidad[1] = 0;
 
+      personas_a_enviar[j].id = -1;
+      personas_a_enviar[j].valido = 0;
+      personas_a_enviar[j].edad = -1;
+      personas_a_enviar[j].estado = -1;
+      personas_a_enviar[j].p_muerte = 0;
+      personas_a_enviar[j].incubacion = 0;
+      personas_a_enviar[j].recuperacion = 0;
+      personas_a_enviar[j].posicion[0] = 0;
+      personas_a_enviar[j].posicion[1] = 0;
+      personas_a_enviar[j].velocidad[0] = 0;
+      personas_a_enviar[j].velocidad[1] = 0;
+    }
+}
 
 int main(int argc, char* argv[]) 
 {
@@ -790,6 +857,8 @@ int main(int argc, char* argv[])
  struct Persona *Tablero = malloc(sizeof(struct Persona)*(tam_tablero*tam_tablero));
   
   int tamano_poblacion = sizeof(struct Poblacion);
+  printf("tamano_poblacion:%d\n",tamano_poblacion);
+  fflush(stdin);
   struct Poblacion *Poblacion = malloc(tamano_poblacion);
   int *posIndividuos =(int*)malloc(sizeof(int)*tam_Poblacion);
   int i = 0;
@@ -829,8 +898,6 @@ int main(int argc, char* argv[])
   struct Persona *particion_Tablero = malloc(dimension_local*sizeof(struct Persona));
   MPI_Datatype PersonaType;
   Crear_Tipo(&(Tablero->id),&(Tablero->valido),&(Tablero->edad),&(Tablero->estado),&(Tablero->p_muerte),&(Tablero->incubacion),&(Tablero->recuperacion),Tablero->posicion,Tablero->velocidad,&PersonaType);
-  //Reparticion del tablero y vector de posiciones
-  MPI_Bcast(posIndividuos, tam_Poblacion, MPI_INT, 0, MPI_COMM_WORLD);
  
   if(world_rank==0)
   {
@@ -841,18 +908,10 @@ int main(int argc, char* argv[])
   }
   MPI_Scatter(Tablero,dimension_local,PersonaType,particion_Tablero,dimension_local,PersonaType,0,MPI_COMM_WORLD);
 
-  printf("Hola, soy el procesador %d y ya tengo mi trozo de la matriz \n",world_rank);
-  fflush(stdin);
   int *posIndividuosLocal = (int*)malloc(tam_Poblacion*sizeof(int));
-  Personas_en_mi(particion_Tablero,posIndividuosLocal,dimension_local);
-  if(world_rank==world_size-1)
-  {
-    for(i=0;i<tam_Poblacion;i++)
-    {
-      printf("Localmente estoy aqui :%d %d\n",posIndividuosLocal[i],world_rank);
-      fflush(stdin);
-    }
-  }
+  Personas_en_mi(particion_Tablero,posIndividuosLocal,dimension_local,tam_Poblacion);
+  free(posIndividuos);
+
   int t=0;
   int vacunas=0;
   int *Vacunados_Muertos = (int *)malloc(5* sizeof(int));
@@ -860,6 +919,7 @@ int main(int argc, char* argv[])
   float tempVacuna=0.0;
   struct Persona *personas_a_enviar = malloc(tam_Poblacion*sizeof(struct Persona));
   struct Persona *personas_a_enviar_mas = malloc(tam_Poblacion*sizeof(struct Persona));
+  inicializar_envios(personas_a_enviar,personas_a_enviar_mas,tam_Poblacion);
   int cantidad_enviar = 0;
   int cantidad_enviar_mas = 0;
   int recepcion=0;
@@ -869,17 +929,12 @@ int main(int argc, char* argv[])
   if(enviado_abajo==world_size)enviado_abajo= world_size-1;
   if(enviado_arriba<0)enviado_arriba= 0;
 
-  printf("Hola, soy el procesador %d y personas a enviar \n",world_rank);
-  fflush(stdin);
-
   //Bucle principal del comportamiento de las personas
   while( t < Simulacion ) 
   {
     printf("Hola, soy el procesador %d y empiezo estados local iteracion %d \n",world_rank,t);
     fflush(stdin);
     cambiar_estado_poblacion(&cantidad_enviar,&cantidad_enviar_mas,dimension_local,tam_tablero,world_size,world_rank,posIndividuosLocal,particion_Tablero,Poblacion,tam_Poblacion, Vacunados_Muertos,personas_a_enviar,personas_a_enviar_mas);
-    printf("Hola, soy el procesador %d y empiezo estados bordes iteracion %d y valor de cantidad: %d, cantidad_mas: %d \n",world_rank,t,cantidad_enviar,cantidad_enviar_mas);
-    fflush(stdin);
     //Comunicaciones para los tamaños de los vectores que contienen las personas en los bordes estado
     MPI_Send(&cantidad_enviar, 1, MPI_INT,enviado_abajo, 0, MPI_COMM_WORLD);
     MPI_Send(&cantidad_enviar_mas,1, MPI_INT,enviado_arriba, 0, MPI_COMM_WORLD);
@@ -887,14 +942,16 @@ int main(int argc, char* argv[])
     MPI_Recv(&recepcion_mas,1, MPI_INT,enviado_arriba,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     //Comunicaciones de envio y recepcion de las personas para estado en los bordes estado
     MPI_Send(personas_a_enviar, cantidad_enviar, PersonaType,enviado_abajo, 0, MPI_COMM_WORLD);
-    MPI_Recv(personas_a_enviar, recepcion, PersonaType,enviado_abajo,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     MPI_Send(personas_a_enviar_mas, cantidad_enviar_mas, PersonaType,enviado_arriba, 0, MPI_COMM_WORLD);
+    MPI_Recv(personas_a_enviar, recepcion, PersonaType,enviado_abajo,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     MPI_Recv(personas_a_enviar_mas, recepcion_mas, PersonaType,enviado_arriba,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    cambiar_estado_poblacion_bordes(&cantidad_enviar,&cantidad_enviar_mas,personas_a_enviar,personas_a_enviar_mas,dimension_local,tam_Poblacion,posIndividuos,posIndividuosLocal,particion_Tablero,Poblacion,Vacunados_Muertos, tam_tablero, world_rank,world_size, PersonaType);
+    printf("Hola, soy el procesador %d y empezar estados bordes iteracion %d,valor de recepcion:%d y recepcion_mas:%d \n",world_rank,t,recepcion,recepcion_mas);
+    fflush(stdin);
+    cambiar_estado_poblacion_bordes(recepcion,recepcion_mas,personas_a_enviar,personas_a_enviar_mas,dimension_local,tam_Poblacion,posIndividuosLocal,particion_Tablero,Vacunados_Muertos, tam_tablero, world_rank,world_size, PersonaType);
     printf("Hola, soy el procesador %d y estados terminados ahora a mover iteracion %d \n",world_rank,t);
     fflush(stdin);
-    mover_persona(particion_Tablero,posIndividuos, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size,&cantidad_enviar,&cantidad_enviar_mas,personas_a_enviar,personas_a_enviar_mas, &PersonaType);
+    mover_persona(particion_Tablero, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size,&cantidad_enviar,&cantidad_enviar_mas,personas_a_enviar,personas_a_enviar_mas, &PersonaType);
     printf("Hola, soy el procesador %d y mover terminado iteracion %d \n",world_rank,t);
     fflush(stdin);
     //Comunicaciones para los tamaños de los vectores que contienen las personas a mover
@@ -907,20 +964,17 @@ int main(int argc, char* argv[])
     MPI_Recv(personas_a_enviar,recepcion , PersonaType,enviado_abajo,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
     MPI_Send(personas_a_enviar_mas, cantidad_enviar_mas, PersonaType,enviado_arriba, 0, MPI_COMM_WORLD);
     MPI_Recv(personas_a_enviar_mas, recepcion_mas, PersonaType,enviado_arriba,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    
-    colocar_personas(particion_Tablero,posIndividuosLocal,posIndividuos,recepcion,recepcion_mas,personas_a_enviar,personas_a_enviar_mas,world_size,world_rank,tam_tablero,dimension_local);
+    printf("Hola, soy el procesador %d y empezar colocar iteracion %d \n",world_rank,t);
+    fflush(stdin);
+    colocar_personas(particion_Tablero,posIndividuosLocal,recepcion,recepcion_mas,personas_a_enviar,personas_a_enviar_mas,world_size,world_rank,tam_tablero,dimension_local);
     if(world_rank==0)
     {
-     printf("Hola, soy el procesador %d y empiezo el proceso de vacunacion %d \n",world_rank,t);
-     fflush(stdin);
      tempVacuna = vacunaDiaria+tempVacuna;
      while(tempVacuna >=1)
      {
       vacunas++;                        //El proceso de vacunacion debe realizarlo un unico procesador
       tempVacuna--;                     //Para que no todos vacunen el mismo numero de personas y se inmunice a la poblacion instantaneamente
      }
-     printf("Hola, soy el procesador %d y voy a entrar en la funcion de vacunar %d \n",world_rank,t);
-     fflush(stdin);
      vacunar_persona(particion_Tablero, posIndividuosLocal,vacunas,tam_Poblacion,Vacunados_Muertos);
      vacunas=0;
      printf("Hola, soy el procesador %d y vacunacion %d terminada \n",world_rank,t);
@@ -944,9 +998,10 @@ int main(int argc, char* argv[])
    FILE *fb;
  	 fb = fopen( "valores.pos", "w");
    int z;
-   for(z=0;z<tam_Poblacion;z++)
+   for(z=0;z<tam_Poblacion*tam_Poblacion;z++)
    {
-    fprintf(fb,"Soy yo %d y estoy en la posicion %d %d y estoy %d y mivelocidad es de %d %d\n",Tablero[posIndividuos[z]].id,Tablero[posIndividuos[z]].posicion[0],Tablero[posIndividuos[z]].posicion[1],Tablero[posIndividuos[z]].estado,Tablero[posIndividuos[z]].velocidad[0],Tablero[posIndividuos[z]].velocidad[1]);
+     if(Tablero[z].id!=-1)
+     fprintf(fb,"Soy yo %d y estoy en la posicion %d %d y estoy %d y mivelocidad es de %d %d\n",Tablero[z].id,Tablero[z].posicion[0],Tablero[z].posicion[1],Tablero[z].estado,Tablero[z].velocidad[0],Tablero[z].velocidad[1]);
    }
    fclose(fb);
    FILE *fp;
@@ -959,7 +1014,8 @@ int main(int argc, char* argv[])
   free(posIndividuosLocal);
   free(Vacunados_Muertos);
   free(Poblacion);
-  free(posIndividuos);
   free(Tablero);
+  free(personas_a_enviar);
+  free(personas_a_enviar_mas);
   MPI_Finalize();
 }
