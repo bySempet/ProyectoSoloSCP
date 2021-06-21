@@ -20,7 +20,6 @@ struct Poblacion
   double p_contagio;// Probabilidad de ser contagiado por otra persona
   int incubacion;
   int recuperacion;
-  float cambio_vel;
 };
 
 struct Persona
@@ -375,18 +374,14 @@ void mover_persona(struct Persona *particion_Tablero,  int *posIndividuosLocal, 
 void cambiar_estado_poblacion(int *cantidad_enviar,int *cantidad_enviar_mas,int dimension_local,int tam_fila,int world_size,int world_rank,int *posIndividuosLocal,struct Persona *particion_Tablero,struct Poblacion *Poblacion,int tam_vector,int * Vacunados_Muertos,struct Persona * personas_a_enviar,struct Persona * personas_a_enviar_mas)
 {
   printf("entro primera linea");
-    fflush(stdin);
   int i,j,x,y,id,personas_en_particion,num_filas, cantidad1,cantidad2;
-  personas_en_particion=0;
+  personas_en_particion=0;i=0;j=0;id=0;y=0;x=0;num_filas=dimension_local/tam_fila;cantidad1=0;cantidad2=0;
+  printf("dimension local:%d tam filas %d y num filas:%d",dimension_local,tam_fila,num_filas);
   for(i=0;i<tam_vector;i++)
   {
     if(posIndividuosLocal[i]==0) break;
     else personas_en_particion++;
   }
-  id=0;y=0;x=0;
-  num_filas=dimension_local/tam_fila;
-  cantidad1=0;
-  cantidad2=0;
   for(i = 0; i<personas_en_particion;i++) 
   {
     x=posIndividuosLocal[i];
@@ -847,14 +842,14 @@ int main(int argc, char* argv[])
   pVacunacion = strtol(argv[4],&v,10);
   vacunaDiaria=(float) ((float)(tam_Poblacion*(pVacunacion/100.0))/Simulacion);
   particion = tam_tablero/world_size;
-
+  int total = tam_tablero*tam_tablero;
   if(tam_Poblacion>((tam_tablero*tam_tablero)/2))
   {
     printf("La poblacion debe de ser menor o igual la mitad del tablero \n");
     MPI_Finalize();
     return 2;
   }
- struct Persona *Tablero = malloc(sizeof(struct Persona)*(tam_tablero*tam_tablero));
+ struct Persona *Tablero = malloc(sizeof(struct Persona)*total);
   
   int tamano_poblacion = sizeof(struct Poblacion);
   printf("tamano_poblacion:%d\n",tamano_poblacion);
@@ -910,7 +905,6 @@ int main(int argc, char* argv[])
 
   int *posIndividuosLocal = (int*)malloc(tam_Poblacion*sizeof(int));
   Personas_en_mi(particion_Tablero,posIndividuosLocal,dimension_local,tam_Poblacion);
-  free(posIndividuos);
 
   int t=0;
   int vacunas=0;
@@ -932,8 +926,7 @@ int main(int argc, char* argv[])
   //Bucle principal del comportamiento de las personas
   while( t < Simulacion ) 
   {
-    printf("Hola, soy el procesador %d y empiezo estados local iteracion %d \n",world_rank,t);
-    fflush(stdin);
+
     cambiar_estado_poblacion(&cantidad_enviar,&cantidad_enviar_mas,dimension_local,tam_tablero,world_size,world_rank,posIndividuosLocal,particion_Tablero,Poblacion,tam_Poblacion, Vacunados_Muertos,personas_a_enviar,personas_a_enviar_mas);
     //Comunicaciones para los tamaños de los vectores que contienen las personas en los bordes estado
     MPI_Send(&cantidad_enviar, 1, MPI_INT,enviado_abajo, 0, MPI_COMM_WORLD);
@@ -946,14 +939,10 @@ int main(int argc, char* argv[])
     MPI_Recv(personas_a_enviar, recepcion, PersonaType,enviado_abajo,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     MPI_Recv(personas_a_enviar_mas, recepcion_mas, PersonaType,enviado_arriba,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    printf("Hola, soy el procesador %d y empezar estados bordes iteracion %d,valor de recepcion:%d y recepcion_mas:%d \n",world_rank,t,recepcion,recepcion_mas);
-    fflush(stdin);
     cambiar_estado_poblacion_bordes(recepcion,recepcion_mas,personas_a_enviar,personas_a_enviar_mas,dimension_local,tam_Poblacion,posIndividuosLocal,particion_Tablero,Vacunados_Muertos, tam_tablero, world_rank,world_size, PersonaType);
-    printf("Hola, soy el procesador %d y estados terminados ahora a mover iteracion %d \n",world_rank,t);
-    fflush(stdin);
+
     mover_persona(particion_Tablero, posIndividuosLocal,tam_tablero, tam_Poblacion, dimension_local, world_rank,world_size,&cantidad_enviar,&cantidad_enviar_mas,personas_a_enviar,personas_a_enviar_mas, &PersonaType);
-    printf("Hola, soy el procesador %d y mover terminado iteracion %d \n",world_rank,t);
-    fflush(stdin);
+
     //Comunicaciones para los tamaños de los vectores que contienen las personas a mover
     MPI_Send(&cantidad_enviar, 1, MPI_INT,enviado_abajo, 0, MPI_COMM_WORLD);
     MPI_Send(&cantidad_enviar_mas,1, MPI_INT,enviado_arriba, 0, MPI_COMM_WORLD);
@@ -964,8 +953,7 @@ int main(int argc, char* argv[])
     MPI_Recv(personas_a_enviar,recepcion , PersonaType,enviado_abajo,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
     MPI_Send(personas_a_enviar_mas, cantidad_enviar_mas, PersonaType,enviado_arriba, 0, MPI_COMM_WORLD);
     MPI_Recv(personas_a_enviar_mas, recepcion_mas, PersonaType,enviado_arriba,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    printf("Hola, soy el procesador %d y empezar colocar iteracion %d \n",world_rank,t);
-    fflush(stdin);
+
     colocar_personas(particion_Tablero,posIndividuosLocal,recepcion,recepcion_mas,personas_a_enviar,personas_a_enviar_mas,world_size,world_rank,tam_tablero,dimension_local);
     if(world_rank==0)
     {
@@ -977,14 +965,8 @@ int main(int argc, char* argv[])
      }
      vacunar_persona(particion_Tablero, posIndividuosLocal,vacunas,tam_Poblacion,Vacunados_Muertos);
      vacunas=0;
-     printf("Hola, soy el procesador %d y vacunacion %d terminada \n",world_rank,t);
-     fflush(stdin);
     }
-   
-    printf("Hola, soy el procesador %d y termino la iteracion %d \n",world_rank,t);
-    fflush(stdin);
     t++;
-
   }
   
   MPI_Gather(Vacunados_Muertos, 5, MPI_INT, Vacunados_Muertos, 5, MPI_INT, 0, MPI_COMM_WORLD);//Recogida de datos de los procesadores
@@ -993,7 +975,7 @@ int main(int argc, char* argv[])
   if(world_rank==0)
   {
    t1 = MPI_Wtime();
-   printf("\nTej + Comunicaciones : %1.3f ms\n", (t1 - t0)*1000);
+   printf("\nTej + Comunicaciones : %1.3f ms\n", (t1 - t0));
 
    FILE *fb;
  	 fb = fopen( "valores.pos", "w");
@@ -1011,6 +993,7 @@ int main(int argc, char* argv[])
   }
   
   free(particion_Tablero);
+  free(posIndividuos);
   free(posIndividuosLocal);
   free(Vacunados_Muertos);
   free(Poblacion);
